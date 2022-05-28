@@ -257,7 +257,7 @@ defmodule CheckerTest do
   test "malformed URLs", %{instance: instance} do
     url = "ttps://google.com"
     Checker.add(instance, url)
-    sleep(100)
+    sleep()
 
     assert Checker.state(instance) == %{"ttps://google.com" => :error}
   end
@@ -367,9 +367,6 @@ defmodule CheckerTest do
       Checker.add(instance, @url_unreachable)
       Checker.add(instance, @url_google)
 
-      Checker.delete(instance, @url_unreachable)
-      Checker.delete(instance, @url_unreachable)
-      Checker.delete(instance, @url_unreachable)
       Checker.delete(instance, @url_unreachable)
       Checker.delete(instance, @url_unreachable)
       Checker.delete(instance, @url_unreachable)

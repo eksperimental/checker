@@ -1,5 +1,6 @@
 defmodule GenServer.Sync.Case do
   @moduledoc false
+
   defmacro __using__(_options \\ []) do
     quote generated: true do
       require Logger

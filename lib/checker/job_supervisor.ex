@@ -12,7 +12,6 @@ defmodule Checker.JobSupervisor do
   end
 
   @impl Supervisor
-  # @spec init(term) :: {:ok, {:supervisor.sup_flags(), [Supervisor.child_spec()]}} | :ignore
   def init(_args) do
     # Process.flag(:trap_exit, true)
 

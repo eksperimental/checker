@@ -16,7 +16,6 @@ defmodule Checker.Job do
     GenServer.start_link(__MODULE__, args, name: via)
   end
 
-  # Callback implementations
   @impl GenServer
   def init(job_args) do
     # Process.flag(:trap_exit, true)
@@ -36,13 +35,11 @@ defmodule Checker.Job do
   end
 
   @impl GenServer
-  # Loops checking for status
   def handle_info(
         :check_status,
         %Job{interval: interval, caller: caller, url: url} = job
       ) do
     _task = fetch_url_and_update_status(url, caller)
-
     Process.send_after(self(), :check_status, interval)
 
     {:noreply, job}
@@ -63,10 +60,6 @@ defmodule Checker.Job do
   def terminate(:shutdown, _state) do
     :normal
   end
-
-  # def terminate(reason, state) do
-  #   {reason, state}
-  # end
 
   ##############################
   # Helpers

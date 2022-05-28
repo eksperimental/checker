@@ -85,8 +85,9 @@ defmodule Checker.Util do
     Keyword.fetch!(keyword_list, key)
   end
 
-  # Registry
-  @doc false
+  ############################
+  # Registry functions
+
   def get_job_pid(instance, url) when is_instance(instance) and is_binary(url) do
     case Registry.lookup(Checker.Registry, {:job, instance, url}) do
       [{job_pid, _}] ->

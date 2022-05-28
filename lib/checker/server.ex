@@ -21,7 +21,6 @@ defmodule Checker.Server do
     GenServer.start_link(__MODULE__, args, name: via)
   end
 
-  # Callback implementations
   @impl GenServer
   def init(_args \\ []) do
     Process.flag(:trap_exit, true)
@@ -29,7 +28,6 @@ defmodule Checker.Server do
   end
 
   @impl GenServer
-  # Does the actual status update
   def handle_info({:update_status, url, new_status}, state) do
     Logger.debug("{{#{new_status}}} #{url}")
     new_state = update_status(state, url, new_status)
@@ -42,7 +40,6 @@ defmodule Checker.Server do
   end
 
   def handle_cast({:add, url}, state) do
-    # Dispatch a new Job worker
     {:ok, _supervisor_job_pid} =
       with pid <- self(),
            instance <- Util.get_instance(pid),
@@ -103,8 +100,8 @@ defmodule Checker.Server do
     {:ok, _pid} =
       with pid <- self(),
            instance <- Util.get_instance(pid),
-           via_instance <- Util.via(instance) do
-        :ok = Supervisor.terminate_child(via_instance, Checker.JobSupervisor)
+           via_instance <- Util.via(instance),
+           :ok <- Supervisor.terminate_child(via_instance, Checker.JobSupervisor) do
         Supervisor.restart_child(via_instance, Checker.JobSupervisor)
       end
 

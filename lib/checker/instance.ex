@@ -21,7 +21,7 @@ defmodule Checker.Instance do
     Supervisor.start_link(__MODULE__, args, name: Util.via(instance, config))
   end
 
-  @impl true
+  @impl Supervisor
   def init(args) do
     children = [
       {Checker.Server, args},
