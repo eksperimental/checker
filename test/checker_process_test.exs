@@ -1,5 +1,5 @@
 defmodule CheckerProcessTest do
-  import TestHelper
+  import GenServerSync
 
   use ExUnit.Case, async: false
 
@@ -29,27 +29,28 @@ defmodule CheckerProcessTest do
     %{
       instance: instance,
       pid: pid,
+      via_worker: Util.via({:server, instance}),
       worker_pid: Util.pid({:server, instance})
     }
   end
 
   describe "add" do
-    test "add, remove, add", %{instance: instance} do
+    test "add, remove, add", %{instance: instance, via_worker: via_worker} do
       assert Checker.add(instance, @url_github) == :ok
-      sleep(5)
+      await(via_worker)
       job_pid = Checker.job_pid(instance, @url_github)
 
       assert Process.alive?(job_pid)
 
       # DELETE URL
       assert Checker.delete(instance, @url_github) == :ok
-      sleep(5)
+      await(via_worker)
 
       refute Process.alive?(job_pid)
       assert Checker.job_pid(instance, @url_github) == nil
 
       assert Checker.add(instance, @url_github) == :ok
-      sleep(5)
+      await(via_worker)
       new_job_pid = Checker.job_pid(instance, @url_github)
 
       assert job_pid != new_job_pid
@@ -77,12 +78,13 @@ defmodule CheckerProcessTest do
       name1 = test_name
       {:ok, pid1} = Checker.start(name1)
       worker_pid1 = Util.pid({:server, name1})
+      via_worker1 = Util.via({:server, name1})
 
       assert Checker.add(name1, @url_github) == :ok
       assert Checker.add(name1, @url_google) == :ok
       assert Checker.add(name1, @url_unstable) == :ok
 
-      sleep(100)
+      await(via_worker1)
 
       # Job PIDs
       github_pid1 = Checker.job_pid(name1, @url_github)
@@ -109,11 +111,12 @@ defmodule CheckerProcessTest do
       # Start a 2nd server
       name2 = :"#{test_name}+2"
       {:ok, pid2} = Checker.start(name2)
+      via_worker2 = Util.via({:server, name2})
 
       # Add again to 1st server
       assert Checker.add(name1, @url_github) == :ok
       assert Checker.add(name1, @url_google) == :ok
-      sleep(10)
+      await(via_worker2)
       github_pid1 = Checker.job_pid(name1, @url_github)
       assert Process.alive?(github_pid1)
       google_pid1 = Checker.job_pid(name1, @url_google)
@@ -126,7 +129,7 @@ defmodule CheckerProcessTest do
       # Add again to 2nd server
       assert Checker.add(name2, @url_github) == :ok
       assert Checker.add(name2, @url_google) == :ok
-      sleep(10)
+      await(via_worker2)
       github_pid2 = Checker.job_pid(name2, @url_github)
       google_pid2 = Checker.job_pid(name2, @url_google)
 

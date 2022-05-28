@@ -1,7 +1,8 @@
 ExUnit.start()
 
 defmodule TestHelper do
-  @default_sleep_timeout 1500
+  @default_sleep_timeout Checker.__default_interval__()
+
   def sleep(timeout \\ @default_sleep_timeout) when is_integer(timeout) and timeout >= 0 do
     Process.sleep(timeout)
   end

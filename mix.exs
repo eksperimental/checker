@@ -102,7 +102,7 @@ defmodule Checker.MixProject do
         {Checker.Mock, :fetch_url_status, 1},
         {Checker.Util, :fetch_url_status, 1},
         {Checker.Util, :child_pid, 1},
-        {GenServer.Sync, :cast, 3}
+        {GenServerSync, :await, 3}
       ]
     ]
   end

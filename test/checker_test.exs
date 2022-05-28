@@ -5,7 +5,7 @@ defmodule CheckerTest do
   import Checker, only: [is_instance: 1]
 
   use ExUnit.Case, async: false
-  use GenServer.Sync.Case
+  import GenServerSync
 
   doctest Checker
 
@@ -31,7 +31,9 @@ defmodule CheckerTest do
 
     %{
       instance: instance,
+      via_instance: Util.via(instance),
       pid: pid,
+      via_worker: Util.via({:server, instance}),
       worker_pid: Util.pid({:server, instance})
     }
   end
@@ -43,7 +45,7 @@ defmodule CheckerTest do
       {:ok, pid} = Checker.start(instance)
       child_pid = Util.pid({:server, instance})
       :ok = Checker.stop(instance)
-      sleep(50)
+
       refute Process.alive?(pid)
       refute Process.alive?(child_pid)
     end
@@ -111,22 +113,28 @@ defmodule CheckerTest do
            } = Checker.list(instance)
   end
 
-  test "list/2", %{instance: instance} do
+  test "list/2", %{instance: instance, via_worker: via_worker} do
     assert Checker.list(instance, 200) == []
     assert Checker.list(instance, :unreachable) == []
 
     Checker.add(instance, @url_up)
     Checker.add(instance, @url_unreachable)
-    sleep(100)
+
+    await(via_worker)
+    sleep()
 
     assert Checker.list(instance, 200) == [@url_up]
     assert Checker.list(instance, :unreachable) == [@url_unreachable]
 
     Checker.add(instance, @url_github)
+
+    await(via_worker)
     assert Checker.list(instance, nil) == [@url_github]
 
     Checker.add(instance, @url_google)
-    sleep(2000)
+
+    await(via_worker)
+    sleep()
 
     assert Checker.list(instance, 200) == [
              @url_github,
@@ -135,17 +143,17 @@ defmodule CheckerTest do
            ]
   end
 
-  test "add/2", %{instance: instance} do
+  test "add/2", %{instance: instance, via_worker: via_worker} do
     for n <- 1..100 do
       url = "https://#{n}.google.com"
       Checker.add(instance, url)
-      url
     end
 
+    await(via_worker)
     assert Checker.list(instance) |> Enum.count() == 100
   end
 
-  test "unreachable urls", %{instance: instance, worker_pid: _worker_pid} do
+  test "unreachable urls", %{instance: instance, via_worker: via_worker} do
     assert Checker.add(instance, @url_github) == :ok
     assert Checker.add(instance, "https://this_site_does_not_exist_444445.org") == :ok
 
@@ -154,7 +162,8 @@ defmodule CheckerTest do
              "https://this_site_does_not_exist_444445.org" => _
            } = Checker.list(instance)
 
-    sleep(1000)
+    await(via_worker)
+    sleep()
 
     assert Checker.list(instance) == %{
              @url_github => 200,
@@ -168,7 +177,7 @@ defmodule CheckerTest do
 
     assert Checker.delete(instance, @url_github) == :ok
 
-    sleep(5)
+    await(via_worker)
 
     assert Checker.list(instance) == %{
              "https://this_site_does_not_exist_444445.org" => :unreachable
@@ -176,6 +185,8 @@ defmodule CheckerTest do
 
     Checker.add(instance, @url_up)
     Checker.add(instance, @url_unreachable)
+
+    await(via_worker)
 
     assert %{
              "https://this_site_does_not_exist_444445.org" => :unreachable,
@@ -192,8 +203,15 @@ defmodule CheckerTest do
 
     # google
     assert Checker.add(instance, @url_google) == :ok
+    await(via_worker)
     assert Checker.status(instance, @url_google) == nil
     assert Checker.delete(instance, @url_google) == :ok
+    await(via_worker)
+
+    assert Checker.status(instance, @url_google) == :error
+    assert Checker.status(instance, "https://yahoo.com") == :error
+    await(via_worker)
+
     assert Checker.status(instance, @url_google) == :error
     assert Checker.status(instance, "https://yahoo.com") == :error
   end
@@ -204,8 +222,9 @@ defmodule CheckerTest do
 
     # Set interval
     {:ok, _pid} = Checker.start(instance, interval: @interval)
+    via_worker = Util.via({:server, instance})
 
-    Checker.debug(:all)
+    # Checker.debug(:all)
 
     urls = [
       @url_github,
@@ -220,7 +239,8 @@ defmodule CheckerTest do
       assert Checker.add(instance, url) == :ok
     end
 
-    sleep()
+    await(via_worker)
+    sleep(@interval + 50)
 
     results =
       for _x <- 1..10 do
@@ -230,11 +250,13 @@ defmodule CheckerTest do
           end
 
         # Wait up for server to check status
-        sleep(@interval)
+        sleep(@interval + 50)
         results
       end
       |> List.flatten()
       |> Enum.group_by(fn {key, _value} -> key end, fn {_key, value} -> value end)
+
+    await(via_worker)
 
     # 200
     assert Enum.all?(results[@url_github], &(&1 == 200))
@@ -245,8 +267,8 @@ defmodule CheckerTest do
     assert Enum.all?(results[@url_unreachable], &(&1 == :unreachable))
 
     # Unstable
-    # assert Enum.any?(results[@url_unstable], &(&1 == 200))
-    # assert Enum.any?(results[@url_unstable], &(&1 == :unreachable))
+    assert Enum.any?(results[@url_unstable], &(&1 == 200))
+    assert Enum.any?(results[@url_unstable], &(&1 == :unreachable))
 
     # :error
     assert Enum.all?(results[@url_malformed], &(&1 == :error))
@@ -254,17 +276,18 @@ defmodule CheckerTest do
     Checker.stop(instance)
   end
 
-  test "malformed URLs", %{instance: instance} do
+  test "malformed URLs", %{instance: instance, via_worker: via_worker} do
     url = "ttps://google.com"
     Checker.add(instance, url)
+    await(via_worker)
     sleep()
 
     assert Checker.state(instance) == %{"ttps://google.com" => :error}
   end
 
-  test "job_pid/1", %{instance: instance, pid: _pid} do
+  test "job_pid/1", %{instance: instance, via_worker: via_worker} do
     Checker.add(instance, @url_up)
-    sleep(50)
+    await(via_worker)
 
     job_pid = Checker.job_pid(instance, @url_up)
     assert is_pid(job_pid)
@@ -293,14 +316,14 @@ defmodule CheckerTest do
     end
   end
 
-  test "add/2 and delete/2", %{instance: instance} do
+  test "add/2 and delete/2", %{instance: instance, via_worker: via_worker} do
     for n <- 101..200 do
       url = "https://#{n}.google.com"
       Checker.add(instance, url)
       url
     end
 
-    assert Checker.list(instance) |> Enum.count() == 100
+    assert await(via_worker) |> Enum.count() == 100
 
     for n <- 131..180 do
       url = "https://#{n}.google.com"
@@ -308,24 +331,31 @@ defmodule CheckerTest do
       url
     end
 
-    assert Checker.list(instance) |> Enum.count() == 50
+    assert await(via_worker) |> Enum.count() == 50
   end
 
   describe "delete" do
-    test "delete malformed", %{instance: instance, worker_pid: worker_pid} do
+    test "delete malformed", %{instance: instance, via_worker: via_worker} do
       Checker.add(instance, @url_malformed)
 
+      await(via_worker)
+
       # TODO: TEST THIS AND FIX
-      assert cast(worker_pid, {:delete, @url_malformed}) == %{}
-      assert cast(worker_pid, {:delete, @url_malformed}) == %{}
+      Checker.delete(instance, @url_malformed)
+      assert await(via_worker) == %{}
+
+      Checker.delete(instance, @url_malformed)
+      assert await(via_worker) == %{}
 
       # Delete a malformed URL that has not been added
-      assert cast(worker_pid, {:delete, "zzzzzzzzzzz"}) == %{}
+      Checker.delete(instance, "zzzzzzzzzzz")
+      assert await(via_worker) == %{}
     end
 
-    test "delete/1", %{instance: instance, worker_pid: worker_pid} do
+    test "delete/1", %{instance: instance, via_worker: via_worker} do
       # Delete a URL when none has not been added yet
-      assert cast(worker_pid, {:delete, "http://wikipedia.org"}) == %{}
+      Checker.delete(instance, "http://wikipedia.org")
+      assert await(via_worker) == %{}
 
       urls = [
         @url_github,
@@ -340,41 +370,49 @@ defmodule CheckerTest do
         Checker.add(instance, url)
       end
 
+      await(via_worker)
+
       ## Delete URL and add it back
-      state = cast(worker_pid, {:delete, @url_up})
-      assert Enum.count(state) == 5
-      state = cast(worker_pid, {:add, @url_up})
-      assert Enum.count(state) == 6
+      Checker.delete(instance, @url_up)
+      assert await(via_worker) |> Enum.count() == 5
+      Checker.add(instance, @url_up)
+      assert await(via_worker) |> Enum.count() == 6
 
       # TODO: TEST THIS AND FIX
-      # cast(worker_pid, {:delete, @url_malformed})
-      cast(worker_pid, {:delete, @url_google})
-      state = cast(worker_pid, {:delete, @url_up})
-      assert Enum.count(state) == 4
+      Checker.delete(instance, @url_google)
+      Checker.delete(instance, @url_up)
+      assert await(via_worker) |> Enum.count() == 4
 
       # Delete a URL that has not been added
-      cast(worker_pid, {:delete, "http://wikipedia.org"})
+      Checker.delete(instance, "http://wikipedia.org")
 
       # Delete a malformed URL that has not been added
-      cast(worker_pid, {:delete, "zzzzzzzzzzz"})
-      cast(worker_pid, {:delete, "dfasfdasssss"})
-      state = cast(worker_pid, {:delete, "dfasfdasssss"})
+      Checker.delete(instance, "zzzzzzzzzzz")
+      Checker.delete(instance, "dfasfdasssss")
+      Checker.delete(instance, "dfasfdasssss")
+      state = await(via_worker)
       assert Enum.count(state) == 4
     end
 
-    test "delete  repeteadly", %{instance: instance} do
-      Checker.add(instance, @url_up)
-      Checker.add(instance, @url_unreachable)
-      Checker.add(instance, @url_google)
+    test "delete  repeteadly", %{instance: instance, via_worker: via_worker} do
+      for _n <- 1..100 do
+        Checker.add(instance, @url_up)
+        Checker.add(instance, @url_unreachable)
+        Checker.add(instance, @url_google)
+      end
 
-      Checker.delete(instance, @url_unreachable)
-      Checker.delete(instance, @url_unreachable)
-      Checker.delete(instance, @url_unreachable)
+      await(via_worker)
+
+      for _n <- 1..500 do
+        Checker.delete(instance, @url_up)
+        Checker.delete(instance, @url_unreachable)
+        Checker.delete(instance, @url_google)
+      end
     end
   end
 
   describe "reset" do
-    test "reset/1", %{instance: instance} do
+    test "reset/1", %{instance: instance, via_worker: via_worker} do
       urls = [
         @url_github,
         @url_google,
@@ -388,7 +426,7 @@ defmodule CheckerTest do
         Checker.add(instance, url)
       end
 
-      sleep(10)
+      await(via_worker)
 
       assert Checker.list(instance) |> map_size() == 6
       assert Checker.reset(instance) == %{}
@@ -397,7 +435,7 @@ defmodule CheckerTest do
       assert %{interval: @default_interval} = Checker.config(instance)
     end
 
-    test "reset  twice", %{instance: instance} do
+    test "reset  twice", %{instance: instance, via_worker: via_worker} do
       urls = [
         @url_github,
         @url_google,
@@ -411,8 +449,13 @@ defmodule CheckerTest do
         Checker.add(instance, url)
       end
 
-      assert Checker.reset(instance) == %{}
-      assert Checker.reset(instance) == %{}
+      await(via_worker)
+
+      Checker.reset(instance)
+      assert await(via_worker) == %{}
+
+      Checker.reset(instance)
+      assert await(via_worker) == %{}
     end
   end
 end

@@ -1,8 +1,8 @@
 defmodule Checker.Server do
   @moduledoc false
 
-  use GenServer, restart: :transient
-  use GenServer.Sync
+  use GenServer
+  use GenServerSync
 
   alias Checker.Util
   require Logger
@@ -165,13 +165,14 @@ defmodule Checker.Server do
 
     child_spec = %{
       id: {:job, instance, url},
-      start: {Checker.Job, :start_link, [args ++ [name: via_job]]}
+      start: {Checker.Job, :start_link, [args ++ [name: via_job]]},
+      restart: :transient
     }
 
     {:ok, _pid} = Supervisor.start_child(via_job_supervisor, child_spec)
   end
 
   defp update_status(state, url, new_status) when is_binary(url) and is_status(new_status) do
-    Map.put(state, url, new_status)
+    Map.replace(state, url, new_status)
   end
 end

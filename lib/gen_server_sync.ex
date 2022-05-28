@@ -1,51 +1,67 @@
-defmodule GenServer.Sync.Case do
-  @moduledoc false
-
-  defmacro __using__(_options \\ []) do
-    quote generated: true do
-      require Logger
-      import GenServer.Sync, only: [cast: 2]
-    end
-  end
-end
-
-defmodule GenServer.Sync do
+defmodule GenServerSync do
   @moduledoc """
   Synchronous asserts on GenServer cast calls.
 
   Examples:
 
+      defmodule Foo  do
+        # Public API
+        def add(server_pid, element) do
+          GenServer.cast(server_pid, element)
+        end
+      end
+
       defmodule Foo.Server do
         use GenServer
 
-        # use GenServer.Sync after `use GenServer`
-        use GenServer.Sync
+        # use GenServerSync after `use GenServer`
+        use GenServerSync
 
         @impl GenServer
-        def init(_args \\ []) do
-          {:ok, %{}}
+        def init(_args) do
+          {:ok, []}
         end
 
-        ...
+        @impl GenServer
+        def handle_cast({:add, element}, state) do
+          {:reply, state ++ [element]}
+        end
+
+        @impl GenServer
+        def handle_info({:delete, element}, state) do
+          {:reply, state -- [element]}
+        end
       end
 
-      defmodule FooTest do
+      defmodule Foo.ServerTest do
         use ExUnit.Case, async: true
 
-        use GenServer.Sync.Case
+        # import all functions
+        import GenServerSync
 
         test "assert on a GenServer.cast/2 call" do
-          assert cast(pid, {:my_request, :foo, :bar}) == [1, 2, 3]
+          ...
+
+          assert await_cast(server_pid, {:add, [3]}) == [1, 2, 3]
+
+          Foo.add(4)
+          state = await(server_pid)
+          assert state == [1, 2, 3, 4]
         end
       end
 
   """
 
+  require Logger
+
+  @type server :: GenServer.name()
+  @type from_pid :: pid() | nil
+
   defmacro __using__(_options \\ []) do
     quote generated: true do
       if Mix.env() == :test do
-        def handle_cast({:__debug_state__, from_pid, time}, state) do
-          Process.send(from_pid, {:__debug__, state, time}, [])
+        def handle_cast({:__state_request__, unique_integer, from_pid}, state) do
+          Process.send(from_pid, {:__state_response__, unique_integer, state}, [])
 
           {:noreply, state}
         end
@@ -53,25 +69,39 @@ defmodule GenServer.Sync do
     end
   end
 
-  defmacro cast(server, request, from_pid \\ nil) do
-    quote do
-      GenServer.cast(unquote(server), unquote(request))
+  @doc """
+  Awaits on an syncronous GenServer call.any()
 
-      from_pid = unquote(from_pid) || self()
-      init_time = :os.system_time(:millisecond)
-      GenServer.cast(unquote(server), {:__debug_state__, from_pid, init_time})
+  It could be a cast or a message passed the GenServer.
+  """
+  @spec await(server(), from_pid(), options) :: state when state: term(), options: keyword()
+  def await(server, from_pid \\ nil, options \\ []) when is_pid(from_pid) or is_nil(from_pid) do
+    log_time? = Keyword.get(options, :log_time, true)
+    from_pid = from_pid || self()
+    init_time = :os.system_time(:millisecond)
+    unique_integer = System.unique_integer()
 
-      receive do
-        {:__debug__, state, init_time} ->
-          elapased_time =
-            (:os.system_time(:millisecond) - init_time)
-            |> to_string()
-            |> Code.format_string!()
+    GenServer.cast(server, {:__state_request__, unique_integer, from_pid})
 
-          Logger.debug("Arrived in #{elapased_time}ms.")
+    receive do
+      {:__state_response__, ^unique_integer, state} ->
+        if log_time? do
+          log_time(init_time)
+        end
 
-          state
-      end
+        state
     end
+  end
+
+  #######################################
+  # Helpers
+
+  defp log_time(init_time) do
+    elapased_time =
+      (:os.system_time(:millisecond) - init_time)
+      |> to_string()
+      |> Code.format_string!()
+
+    Logger.debug("Arrived in #{elapased_time}ms.")
   end
 end
