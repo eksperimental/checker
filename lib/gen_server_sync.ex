@@ -60,10 +60,8 @@ defmodule GenServerSync do
   defmacro __using__(_options \\ []) do
     quote generated: true do
       if Mix.env() == :test do
-        def handle_cast({:__state_request__, unique_integer, from_pid}, state) do
-          Process.send(from_pid, {:__state_response__, unique_integer, state}, [])
-
-          {:noreply, state}
+        def handle_call({unquote(__MODULE__), :__state__}, from_pid, state) do
+          {:reply, state, state}
         end
       end
     end
@@ -77,20 +75,15 @@ defmodule GenServerSync do
   @spec await(server(), from_pid(), options) :: state when state: term(), options: keyword()
   def await(server, from_pid \\ nil, options \\ []) when is_pid(from_pid) or is_nil(from_pid) do
     log_time? = Keyword.get(options, :log_time, true)
-    from_pid = from_pid || self()
-    init_time = :os.system_time(:millisecond)
-    unique_integer = System.unique_integer()
 
-    GenServer.cast(server, {:__state_request__, unique_integer, from_pid})
+    response = GenServer.call(server, {__MODULE__, :__state__}, :infinity)
 
-    receive do
-      {:__state_response__, ^unique_integer, state} ->
-        if log_time? do
-          log_time(init_time)
-        end
-
-        state
+    if log_time? do
+      init_time = :os.system_time(:millisecond)
+      log_time(init_time)
     end
+
+    response
   end
 
   #######################################
