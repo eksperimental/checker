@@ -3,7 +3,7 @@ defmodule Checker.Job do
 
   use GenServer
 
-  alias Checker.{Util, Job}
+  alias Checker.{Job, Util}
   require Logger
 
   defstruct [:instance, :url, :interval, :caller]

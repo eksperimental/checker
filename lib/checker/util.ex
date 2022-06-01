@@ -7,18 +7,16 @@ defmodule Checker.Util do
   @spec fetch_url_status(Checker.url()) ::
           {:ok, Checker.http_response_status() | :unreachable} | {:error, Exception.t()}
   def fetch_url_status(url) when is_binary(url) do
-    try do
-      Req.request(:get, url, receive_timeout: 3000)
-    rescue
-      error ->
-        {:error, error}
-    else
-      {:ok, response} ->
-        {:ok, response.status}
+    Req.request(:get, url, receive_timeout: 3000)
+  rescue
+    error ->
+      {:error, error}
+  else
+    {:ok, response} ->
+      {:ok, response.status}
 
-      {:error, _error} ->
-        {:ok, :unreachable}
-    end
+    {:error, _error} ->
+      {:ok, :unreachable}
   end
 
   @spec via(key) :: {:via, module, {module, key}} when key: term

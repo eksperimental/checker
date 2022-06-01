@@ -49,7 +49,7 @@ defmodule Checker.MixProject do
         "dialyzer",
         "gradient",
         "docs",
-        "credo --ignore Credo.Check.Design.TagTODO"
+        "credo --strict"
       ],
       prepare: [
         "format",
