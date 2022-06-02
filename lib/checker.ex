@@ -35,11 +35,12 @@ defmodule Checker do
 
   @spec stop(instance) :: :ok | {:error, :not_found}
   def stop(instance) when is_instance(instance) do
-    with pid when is_pid(pid) <- Util.pid(instance),
-         via_instance <- Util.via(instance) do
-      DynamicSupervisor.stop(via_instance, :shutdown)
-    else
-      _ ->
+    case Util.pid(instance) do
+      pid when is_pid(pid) ->
+        via_instance = Util.via(instance)
+        DynamicSupervisor.stop(via_instance, :shutdown)
+
+      nil ->
         {:error, :not_found}
     end
   end
