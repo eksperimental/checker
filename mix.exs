@@ -34,7 +34,7 @@ defmodule Checker.MixProject do
       {:req, "~> 0.2.2"},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
-      {:gradient, github: "esl/gradient"},
+      {:gradient, github: "esl/gradient", branch: "issues/98-fix-manual-annotations"},
       {:mix_unused, "~> 0.3.0", only: [:dev, :test], runtime: false}
     ]
   end
