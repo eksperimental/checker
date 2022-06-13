@@ -32,7 +32,7 @@ defmodule Checker.Util do
   @spec unique_id() :: pos_integer()
   def unique_id() do
     System.unique_integer([:positive, :monotonic])
-    |> assert_type({:pos_integer, 0})
+    |> assert_type(pos_integer())
   end
 
   @spec pid(term) :: pid | nil
